@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>桥检测算法动态实验台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="visualizer.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">BRIDGE SEARCH STUDIO</p>
+        <h1>桥检测算法动态实验台</h1>
+        <p class="hero-text">
+          把基准算法与并查集优化算法放在同一张画布上，逐步展示删边、BFS、生成森林、环覆盖与桥确认过程，
+          让“为什么这条边是桥”变成一眼能看懂的动态推演。
+        </p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-card">
+          <span class="stat-label">顶点</span>
+          <strong id="statVertices">0</strong>
+          <span class="stat-note">当前输入规模</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">边</span>
+          <strong id="statEdges">0</strong>
+          <span class="stat-note">无向边总数</span>
+        </div>
+        <div class="stat-card accent">
+          <span class="stat-label">桥</span>
+          <strong id="statBridges">0</strong>
+          <span class="stat-note">最终识别结果</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">步骤</span>
+          <strong id="statSteps">0</strong>
+          <span class="stat-note">当前演示长度</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="mode-strip">
+      <article class="mode-card baseline">
+        <span class="mode-code">B0</span>
+        <h2>基准算法</h2>
+        <p>逐条删除边，并用 BFS 判断端点是否仍然连通。思路直观，但重复遍历较多。</p>
+      </article>
+      <article class="mode-card optimized">
+        <span class="mode-code">UF</span>
+        <h2>并查集优化算法</h2>
+        <p>先建生成森林，再利用非树边覆盖环路径。通过跳跃并查集跳过已处理部分。</p>
+      </article>
+    </section>
+
+    <section class="control-panel">
+      <div class="control-grid">
+        <label class="field">
+          <span>示例图</span>
+          <select id="sampleSelect">
+            <option value="custom">自定义输入</option>
+            <option value="graph">桥与环混合图</option>
+            <option value="tree">纯树图</option>
+            <option value="cycle">团块连接图</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>随机节点数</span>
+          <input id="vertexCountInput" type="number" min="4" max="24" step="1" value="10" />
+        </label>
+        <label class="field">
+          <span>边密度</span>
+          <input id="densityRange" type="range" min="10" max="85" step="1" value="28" />
+          <small><span id="densityValue">0.28</span></small>
+        </label>
+        <label class="field">
+          <span>播放节奏</span>
+          <input id="speedRange" type="range" min="120" max="1200" step="60" value="480" />
+          <small><span id="speedValue">480</span> ms / 步</small>
+        </label>
+        <label class="field textarea-field">
+          <span>输入图</span>
+          <textarea id="graphInput" spellcheck="false"></textarea>
+        </label>
+      </div>
+
+      <div class="action-row">
+        <button id="loadBtn" class="primary">载入输入</button>
+        <button id="randomBtn">随机生成</button>
+        <button id="analyzeBtn">重新生成步骤</button>
+        <button id="prevBtn">上一步</button>
+        <button id="playBtn">播放</button>
+        <button id="nextBtn">下一步</button>
+        <div class="step-track">
+          <input id="stepRange" type="range" min="0" max="0" value="0" />
+          <span id="stepLabel">0 / 0</span>
+        </div>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <section class="board-panel">
+        <div class="panel-heading">
+          <h3>双算法主舞台</h3>
+          <p>同一张图同步展示删边 BFS 与环覆盖判断，让桥检测过程完整落在一张画布上。</p>
+        </div>
+        <div class="canvas-frame">
+          <svg id="graphSvg" viewBox="0 0 760 460" role="img" aria-label="桥检测算法可视化图"></svg>
+        </div>
+        <div class="legend">
+          <span><i class="swatch bridge"></i> 桥</span>
+          <span><i class="swatch focus"></i> 当前检查边</span>
+          <span><i class="swatch removed"></i> 临时删除 / 被覆盖路径</span>
+          <span><i class="swatch forest"></i> 生成森林树边</span>
+        </div>
+      </section>
+
+      <aside class="insight-panel">
+        <div class="panel-heading">
+          <h3>算法说明</h3>
+          <p id="stepTitle">等待载入图数据</p>
+        </div>
+        <div class="narrative-card">
+          <h4>当前动作</h4>
+          <p id="stepNarrative">点击“载入输入”后开始生成双算法的同步步骤。</p>
+        </div>
+        <div class="status-grid">
+          <div class="status-box baseline-box">
+            <h4>基准算法状态</h4>
+            <p id="baselineState">尚未开始</p>
+          </div>
+          <div class="status-box optimized-box">
+            <h4>优化算法状态</h4>
+            <p id="optimizedState">尚未开始</p>
+          </div>
+        </div>
+        <div class="chip-section">
+          <h4>已确认桥</h4>
+          <div id="bridgeList" class="chip-list"></div>
+        </div>
+        <div class="chip-section">
+          <h4>当前 BFS 可达点</h4>
+          <div id="reachableList" class="chip-list muted"></div>
+        </div>
+        <div class="chip-section">
+          <h4>并查集父节点快照</h4>
+          <div id="parentList" class="chip-list muted"></div>
+        </div>
+        <div class="complexity-strip">
+          <div class="complexity-card">
+            <span class="complexity-label">基准算法</span>
+            <strong>O(E · (V + E))</strong>
+            <small>逐边 BFS 判断</small>
+          </div>
+          <div class="complexity-card">
+            <span class="complexity-label">并查集优化</span>
+            <strong>近似 O(V + E)</strong>
+            <small>生成森林 + 环覆盖</small>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <section class="forest-panel">
+      <div class="panel-heading">
+        <h3>并查集森林视图</h3>
+        <p>单独抽出优化算法构建的生成森林，便于观察哪些树边最终保留为桥，哪些树边被非树边覆盖。</p>
+      </div>
+      <div class="forest-grid">
+        <div class="canvas-frame forest-frame">
+          <svg id="forestSvg" viewBox="0 0 760 320" role="img" aria-label="并查集生成森林"></svg>
+        </div>
+        <div class="forest-notes">
+          <div class="narrative-card cold-card">
+            <h4>森林阶段</h4>
+            <p id="forestStage">等待载入图数据</p>
+          </div>
+          <div class="chip-section dark-chip-section">
+            <h4>森林树边</h4>
+            <div id="forestEdgeList" class="chip-list"></div>
+          </div>
+          <div class="chip-section dark-chip-section">
+            <h4>被环覆盖的树边</h4>
+            <div id="coveredEdgeList" class="chip-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="visualizer.js"></script>
+</body>
+</html>
